@@ -1,0 +1,1 @@
+obj-m := mainsense_strix_halo.o

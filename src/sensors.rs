@@ -246,7 +246,8 @@ fn read_gpu(
     let metrics = (!card.sleeping)
         .then(|| read_metrics(&metrics_path))
         .flatten();
-    if let Some(metrics) = &metrics {
+    let metrics_v3 = metrics.as_ref().and_then(|table| table.v3.as_ref());
+    if let Some(metrics) = metrics_v3 {
         channels.temperatures.push(json!({
             "id": format!("{}#soc", canonical(&metrics_path).display()),
             "chip": "amdgpu_metrics",
@@ -262,11 +263,13 @@ fn read_gpu(
             "sample_age_seconds": 0.0,
         }));
     }
+    if let Some(table) = &metrics {
+        append_metrics_voltages(&mut channels.voltages, &metrics_path, &card.name, table);
+    }
     let (memory_clock_mhz, memory_clock_source) = match sensor("freq2_input", 1_000_000.0) {
         Some(mhz) => (Some(mhz), Some("hwmon freq2_input")),
         None => {
-            let clock = metrics
-                .as_ref()
+            let clock = metrics_v3
                 .and_then(|data| data.memory_clock_mhz)
                 .map(f64::from);
             (clock, clock.map(|_| "gpu_metrics v3.0 average UCLK"))
@@ -295,13 +298,17 @@ fn read_gpu(
         "clock_mhz": sensor("freq1_input", 1_000_000.0),
         "memory_clock_mhz": memory_clock_mhz,
         "memory_clock_source": memory_clock_source,
-        "metrics": metrics.map(|data| json!({
-            "version": "3.0",
-            "gfx_temperature_c": data.gfx_temperature_c,
-            "soc_temperature_c": data.soc_temperature_c,
-            "clock_mhz": data.clock_mhz,
-            "memory_clock_mhz": data.memory_clock_mhz,
-        })).unwrap_or_else(|| json!({})),
+        "metrics": match (metrics.as_ref(), metrics_v3) {
+            (Some(table), Some(data)) => json!({
+                "version": table.version,
+                "gfx_temperature_c": data.gfx_temperature_c,
+                "soc_temperature_c": data.soc_temperature_c,
+                "clock_mhz": data.clock_mhz,
+                "memory_clock_mhz": data.memory_clock_mhz,
+            }),
+            (Some(table), None) => json!({ "version": table.version }),
+            (None, _) => json!({}),
+        },
         "fan_rpm": (!card.sleeping).then(|| unsigned(&chip.join("fan1_input"))).flatten(),
     })
 }
@@ -338,6 +345,12 @@ fn read_channels(chip: &Path, name: &str, sleeping: bool) -> Channels {
                 "status": measurement.status, "error_code": measurement.error_code,
             }));
         } else if channel.strip_prefix("in").is_some_and(digits) {
+            let label = channel_label(chip, channel);
+            if label.strip_prefix("in").is_some_and(digits)
+                || (name == "strixhalo_smu" && label.starts_with("SMU rail "))
+            {
+                continue;
+            }
             let state = channel_status(chip, channel, sleeping);
             let mut measurement = read_measurement(&input, 1000.0, state);
             if name == "amdgpu"
@@ -362,7 +375,7 @@ fn read_channels(chip: &Path, name: &str, sleeping: bool) -> Channels {
                 );
             channels.voltages.push(json!({
                 "id": canonical(&input).to_string_lossy(), "source": input.to_string_lossy(),
-                "chip": name, "device": basename(chip), "kind": kind, "label": channel_label(chip, channel),
+                "chip": name, "device": basename(chip), "kind": kind, "label": label,
                 "voltage_v": measurement.value, "alarm": alarm,
                 "status": measurement.status, "error_code": measurement.error_code,
             }));
@@ -394,28 +407,140 @@ struct MetricsV3 {
     memory_clock_mhz: Option<u16>,
 }
 
-fn read_metrics(path: &Path) -> Option<MetricsV3> {
-    // Reject any table other than the exact v3.0 layout, including longer tables.
+struct VoltageField {
+    offset: usize,
+    label: &'static str,
+    hwmon_labels: &'static [&'static str],
+}
+
+// Linux kgd_pp_interface.h native struct offsets verified on x86-64.
+const METRICS_V1_3_VOLTAGES: &[VoltageField] = &[
+    VoltageField {
+        offset: 104,
+        label: "SoC",
+        hwmon_labels: &["vddnb", "vddsoc"],
+    },
+    VoltageField {
+        offset: 106,
+        label: "GFX",
+        hwmon_labels: &["vddgfx"],
+    },
+    VoltageField {
+        offset: 108,
+        label: "Memory",
+        hwmon_labels: &["vddmem"],
+    },
+];
+const METRICS_V2_4_VOLTAGES: &[VoltageField] = &[
+    VoltageField {
+        offset: 152,
+        label: "CPU avg",
+        hwmon_labels: &["vddcpu"],
+    },
+    VoltageField {
+        offset: 154,
+        label: "SoC avg",
+        hwmon_labels: &["vddnb", "vddsoc"],
+    },
+    VoltageField {
+        offset: 156,
+        label: "GFX avg",
+        hwmon_labels: &["vddgfx"],
+    },
+];
+
+struct GpuMetrics {
+    version: &'static str,
+    v3: Option<MetricsV3>,
+    voltages: Vec<(&'static VoltageField, u16)>,
+}
+
+fn read_metrics(path: &Path) -> Option<GpuMetrics> {
+    // Limit the read to the largest supported layout plus a byte to detect a longer table.
     let mut bytes = Vec::with_capacity(265);
     File::open(path)
         .ok()?
         .take(265)
         .read_to_end(&mut bytes)
         .ok()?;
-    if bytes.len() != 264 || bytes[..4] != [8, 1, 3, 0] {
+    let [size_lo, size_hi, format, content] = *bytes.first_chunk::<4>()?;
+    let size = usize::from(u16::from_le_bytes([size_lo, size_hi]));
+    if bytes.len() != size {
         return None;
     }
-    // Linux kgd_pp_interface.h offsets, SMU temperature fields in hundredths of C.
-    let read = |offset| {
-        let value = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
-        (value != u16::MAX).then_some(value)
+    let read = |offset| u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
+    let (version, voltage_fields, v3) = match (size, format, content) {
+        (120, 1, 3) => ("1.3", METRICS_V1_3_VOLTAGES, None),
+        (168, 2, 4) => ("2.4", METRICS_V2_4_VOLTAGES, None),
+        (264, 3, 0) => {
+            // SMU temperature fields in hundredths of a degree C.
+            let available = |offset| {
+                let value = read(offset);
+                (value != u16::MAX).then_some(value)
+            };
+            let v3 = MetricsV3 {
+                gfx_temperature_c: available(4).map(|value| f64::from(value) / 100.0),
+                soc_temperature_c: available(6).map(|value| f64::from(value) / 100.0),
+                clock_mhz: available(174),
+                memory_clock_mhz: available(186),
+            };
+            ("3.0", &[][..], Some(v3))
+        }
+        _ => return None,
     };
-    Some(MetricsV3 {
-        gfx_temperature_c: read(4).map(|value| f64::from(value) / 100.0),
-        soc_temperature_c: read(6).map(|value| f64::from(value) / 100.0),
-        clock_mhz: read(174),
-        memory_clock_mhz: read(186),
+    let voltages = voltage_fields
+        .iter()
+        .filter_map(|field| {
+            let millivolts = read(field.offset);
+            // Zero and all-ones are placeholders. Also reject out-of-range rail voltages.
+            (1..=3000)
+                .contains(&millivolts)
+                .then_some((field, millivolts))
+        })
+        .collect();
+    Some(GpuMetrics {
+        version,
+        v3,
+        voltages,
     })
+}
+
+fn append_metrics_voltages(voltages: &mut Vec<Value>, path: &Path, card: &str, table: &GpuMetrics) {
+    if table.voltages.is_empty() {
+        return;
+    }
+    let identity = canonical(path);
+    for &(field, millivolts) in &table.voltages {
+        let has_native_reading = voltages.iter().any(|reading| {
+            reading["status"] == "ok"
+                && reading["voltage_v"]
+                    .as_f64()
+                    .is_some_and(|volts| volts > 0.0)
+                && reading["label"].as_str().is_some_and(|label| {
+                    field
+                        .hwmon_labels
+                        .iter()
+                        .any(|alias| label.eq_ignore_ascii_case(alias))
+                })
+        });
+        if has_native_reading {
+            continue;
+        }
+        voltages.push(json!({
+            "id": format!("{}#voltage-{}", identity.display(), field.offset),
+            "source": path.to_string_lossy(),
+            "source_offset_bytes": field.offset,
+            "chip": "amdgpu_metrics",
+            "device": card,
+            "kind": "gpu",
+            "label": format!("{} (AMDGPU v{})", field.label, table.version),
+            "voltage_v": f64::from(millivolts) / 1000.0,
+            "status": "ok",
+            "error_code": null,
+            "alarm": false,
+            "sample_age_seconds": 0.0,
+        }));
+    }
 }
 
 struct Measurement {
@@ -657,15 +782,43 @@ mod tests {
     }
 
     #[test]
+    fn hides_voltage_channels_without_a_rail_identity() {
+        let fixture = Fixture::new();
+        fixture.gpu();
+        fixture.write(&format!("{GPU_MON}/in0_label"), "vddgfx");
+        fixture.write(&format!("{GPU_MON}/in0_input"), "875");
+        fixture.write(&format!("{GPU_MON}/in1_input"), "625");
+        fixture.write(&format!("{BOARD}/in0_label"), "in0");
+        fixture.write(&format!("{BOARD}/in0_input"), "1200");
+        let probe = "class/hwmon/hwmon9";
+        fixture.write(&format!("{probe}/name"), "strixhalo_smu");
+        fixture.write(&format!("{probe}/in0_label"), "SMU rail 1 (0x320)");
+        fixture.write(&format!("{probe}/in0_input"), "1070");
+        fixture.write(&format!("{probe}/in1_label"), "GFX voltage (SMU)");
+        fixture.write(&format!("{probe}/in1_input"), "940");
+
+        let readings = fixture.collector().collect(&fixture.0, 1.0);
+        assert_eq!(readings.voltages.len(), 2);
+        assert_eq!(readings.voltages[0]["label"], "vddgfx");
+        assert_eq!(readings.voltages[1]["label"], "GFX voltage (SMU)");
+        assert_eq!(readings.voltages[1]["voltage_v"], 0.94);
+        assert_eq!(readings.gpus[0]["voltages"], json!(readings.voltages[..1]));
+    }
+
+    #[test]
     fn voltage_units_labels_alarms_and_identity_match_driver() {
         let fixture = Fixture::new();
         fixture.gpu();
         fixture.write(&format!("{GPU_MON}/in0_label"), "vddgfx");
         fixture.write(&format!("{GPU_MON}/in0_input"), "875");
+        fixture.write(&format!("{GPU_MON}/in1_label"), "vddnb");
         fixture.write(&format!("{GPU_MON}/in1_input"), "0");
+        fixture.write(&format!("{BOARD}/in2_label"), "-12V");
         fixture.write(&format!("{BOARD}/in2_input"), "-11900");
         fixture.write(&format!("{BOARD}/in2_min_alarm"), "1");
+        fixture.write(&format!("{BOARD}/in3_label"), "Standby");
         fixture.write(&format!("{BOARD}/in3_input"), "0");
+        fixture.write(&format!("{BOARD}/in4_label"), "Vcore");
         fixture.write(&format!("{BOARD}/in4_input"), "bad");
         fixture.write(&format!("{BOARD}/in_bad_input"), "1234");
         fixture.write("class/power_supply/BAT0/type", "Battery");
@@ -708,6 +861,8 @@ mod tests {
         let fixture = Fixture::new();
         fixture.gpu();
         fixture.write(&format!("{GPU}/power/runtime_status"), "suspended");
+        fixture.write(&format!("{GPU_MON}/in0_label"), "vddgfx");
+        fixture.write(&format!("{BOARD}/in0_label"), "Vcore");
         fixture.write(&format!("{BOARD}/in0_enable"), "0");
         fixture.write(&format!("{BOARD}/temp1_fault"), "1");
         // Broken symlinks would be reported as missing if the input were read.
@@ -763,13 +918,127 @@ mod tests {
         );
     }
 
-    fn gpu_metrics_blob() -> Vec<u8> {
-        let mut data = vec![0xff; 264];
-        data[..4].copy_from_slice(&[8, 1, 3, 0]);
-        for (offset, value) in [(4, 3150u16), (6, 3725), (174, 600), (186, 1000)] {
+    fn metrics_blob(size: u16, version: [u8; 2], fields: &[(usize, u16)]) -> Vec<u8> {
+        let mut data = vec![0xff; usize::from(size)];
+        data[..2].copy_from_slice(&size.to_le_bytes());
+        data[2..4].copy_from_slice(&version);
+        for &(offset, value) in fields {
             data[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
         }
         data
+    }
+
+    fn gpu_metrics_blob() -> Vec<u8> {
+        metrics_blob(
+            264,
+            [3, 0],
+            &[(4, 3150), (6, 3725), (174, 600), (186, 1000)],
+        )
+    }
+
+    #[test]
+    fn gpu_metrics_v1_3_fills_voltages_without_overriding_usable_hwmon() {
+        let fixture = Fixture::new();
+        fixture.gpu();
+        fixture.write(&format!("{GPU_MON}/in0_label"), "VddGfx");
+        fixture.write(&format!("{GPU_MON}/in0_input"), "820");
+        fixture.write(&format!("{GPU_MON}/in1_label"), "vddnb");
+        fixture.write(&format!("{GPU_MON}/in1_input"), "0");
+        let path = format!("{GPU}/gpu_metrics");
+        fixture.write(
+            &path,
+            metrics_blob(120, [1, 3], &[(104, 812), (106, 900), (108, 1100)]),
+        );
+
+        let readings = fixture.collector().collect(&fixture.0, 1.0);
+        let voltages = &readings.voltages;
+        assert_eq!(voltages.len(), 4);
+        assert_eq!(voltages[0]["voltage_v"], 0.82);
+        assert_eq!(voltages[1]["status"], "driver_zero");
+        assert_eq!(voltages[2]["label"], "SoC (AMDGPU v1.3)");
+        assert_eq!(voltages[2]["voltage_v"], 0.812);
+        assert_eq!(voltages[2]["source_offset_bytes"], 104);
+        assert_eq!(
+            voltages[2]["source"],
+            fixture.0.join(&path).to_str().unwrap()
+        );
+        assert_eq!(voltages[3]["label"], "Memory (AMDGPU v1.3)");
+        assert_eq!(voltages[3]["voltage_v"], 1.1);
+        assert_eq!(voltages[3]["source_offset_bytes"], 108);
+        assert_eq!(readings.gpus[0]["voltages"], json!(voltages));
+    }
+
+    #[test]
+    fn gpu_metrics_v2_4_labels_reported_averages_and_ignores_invalid_values() {
+        let fixture = Fixture::new();
+        fixture.gpu();
+        let path = format!("{GPU}/gpu_metrics");
+        fixture.write(
+            &path,
+            metrics_blob(168, [2, 4], &[(152, 850), (154, 950), (156, 1050)]),
+        );
+        let mut sensors = fixture.collector();
+        let readings = sensors.collect(&fixture.0, 1.0);
+        let observed: Vec<_> = readings
+            .voltages
+            .iter()
+            .map(|entry| {
+                (
+                    entry["label"].as_str().unwrap(),
+                    entry["voltage_v"].as_f64().unwrap(),
+                    entry["source_offset_bytes"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            observed,
+            [
+                ("CPU avg (AMDGPU v2.4)", 0.85, 152),
+                ("SoC avg (AMDGPU v2.4)", 0.95, 154),
+                ("GFX avg (AMDGPU v2.4)", 1.05, 156),
+            ]
+        );
+        assert_eq!(readings.gpus[0]["voltages"], json!(readings.voltages));
+
+        fixture.write(
+            &path,
+            metrics_blob(168, [2, 4], &[(152, 0), (154, u16::MAX), (156, 3001)]),
+        );
+        assert!(sensors.collect(&fixture.0, 1.2).voltages.is_empty());
+    }
+
+    #[test]
+    fn gpu_metrics_voltages_require_exact_layout_and_an_awake_gpu() {
+        let fixture = Fixture::new();
+        fixture.gpu();
+        let path = format!("{GPU}/gpu_metrics");
+        let valid = metrics_blob(168, [2, 4], &[(152, 950)]);
+        let mut sensors = fixture.collector();
+        fixture.write(&path, &valid);
+        assert_eq!(sensors.collect(&fixture.0, 1.0).voltages.len(), 1);
+
+        let mut wrong_header_size = valid.clone();
+        wrong_header_size[0] -= 8;
+        let mut wrong_revision = valid.clone();
+        wrong_revision[3] = 3;
+        let mut oversized = valid.clone();
+        oversized.push(0);
+        for unsupported in [
+            &valid[..167],
+            &wrong_header_size,
+            &wrong_revision,
+            &oversized,
+            &gpu_metrics_blob(),
+        ] {
+            fixture.write(&path, unsupported);
+            assert!(sensors.collect(&fixture.0, 1.2).voltages.is_empty());
+        }
+
+        fixture.write(&path, valid);
+        fixture.write(&format!("{GPU}/power/runtime_status"), "suspended");
+        let readings = sensors.collect(&fixture.0, 1.4);
+        assert!(readings.voltages.is_empty());
+        assert_eq!(readings.gpus[0]["voltages"], json!([]));
     }
 
     #[test]
@@ -827,6 +1096,8 @@ mod tests {
         fixture.write(&format!("{thermal}/trip_point_1_type"), "critical");
         fixture.write(&format!("{thermal}/trip_point_1_temp"), "110000");
         fixture.write(&format!("{BOARD}/name"), "board");
+        fixture.write(&format!("{BOARD}/in0_label"), "Vcore");
+        fixture.write(&format!("{BOARD}/in1_label"), "Vmem");
         symlink(
             fixture.0.join(thermal).join("hwmon1"),
             fixture.0.join("class/hwmon/hwmon1"),

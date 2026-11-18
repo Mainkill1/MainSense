@@ -6,8 +6,9 @@ interfaces and runs as a regular user.
 
 ## Install and run
 
-Download the Linux archive for your architecture, extract it, and run the
-executable. [GitHub releases](https://github.com/Mainkill1/MainSense/releases)
+Download the Linux x86-64 archive, extract it, and run the executable. The
+archive includes the optional Strix Halo provider source. For other Linux
+architectures, build from source. [GitHub releases](https://github.com/Mainkill1/MainSense/releases)
 
 ```sh
 ./mainsense --help
@@ -25,8 +26,8 @@ make
 
 The examples below use `mainsense` from your PATH. Use `./mainsense` to
 run it from the current directory.
-If you are upgrading a v0.1.0 checkout and an old `mainsense/` cache directory
-is still present, move it aside before building.
+If an older checkout still has a `mainsense/` cache directory, move it aside
+before building.
 
 The overview keeps CPU and GPU activity and temperatures above RAM and VRAM.
 Wide terminals use two columns; narrow terminals stack the panels. The header
@@ -107,7 +108,7 @@ retention policy.
 | Mem activity | `mem_busy_percent` if available. Controller activity is distinct from allocated memory and from bandwidth in GB/s. |
 | Memory clock | hwmon `freq2_input`, or average UCLK from a supported `gpu_metrics` table. The UI labels the averaged fallback; JSON includes its source. |
 | Temperatures | Raw hwmon readings with the kernel's channel labels. CPU prefers Tdie, then Tctl/package readings. The sensor panel includes NVMe, ACPI and the SoC channel from a supported GPU metrics table. |
-| Voltages | Linux hwmon `inN_input` (millivolts) and power-supply `voltage_now` (microvolts), normalized to volts. The voltage panel shows device labels and hwmon alarms. JSON includes channel paths and lists GPU channels under their GPU as well. |
+| Voltages | Named Linux hwmon channels, power-supply `voltage_now`, and documented AMDGPU metrics fields. Readings are in volts. JSON includes source paths and byte offsets for the binary metrics fields. |
 | SoC power | AMDGPU hwmon power, converted from microwatts. **On APUs it includes the CPU**, so it is not GPU-only power. |
 | Processes | Readable `/proc/PID/stat`: interval CPU usage and resident system RAM. 100% means one logical CPU; multithreaded processes can exceed 100%. |
 
@@ -131,11 +132,51 @@ sensor paths for diagnosing mismatches. The UI selects one GPU at a time.
 
 Voltage coverage depends on the installed hardware and drivers. Some board
 channels report voltage at the sensor pin and need motherboard-specific scaling
-to represent the rail. MainSense shows the driver value and label. AMDGPU graphics
-and Northbridge channels that return placeholder zeros are reported as unavailable.
+to represent the rail. MainSense shows the driver value and label for named
+voltage inputs. It omits unidentified channels, including bare `inN` inputs.
+Named AMDGPU graphics and Northbridge channels that return placeholder zeros
+are reported as unavailable.
 Battery, UPS, and supply drivers can expose live readings via `voltage_now`.
 PMBus regulators and power supplies appear automatically when a kernel driver
 exposes their hwmon voltage channels. [Linux power supply class](https://docs.kernel.org/power/power_supply_class.html), [Linux PMBus driver](https://docs.kernel.org/hwmon/pmbus.html).
+
+### AMDGPU metrics voltages
+
+MainSense uses the documented millivolt fields from `gpu_metrics` when the
+corresponding hwmon voltage is unavailable. The offsets below are in bytes
+relative to the start of the table.
+
+| Table revision | Voltage fields |
+| --- | --- |
+| v1.3, 120 bytes | SoC `0x68`, GFX `0x6a`, memory `0x6c` |
+| v2.4, 168 bytes | Average CPU `0x98`, average SoC `0x9a`, average GFX `0x9c` |
+
+These are driver-reported values. Some v1.3 implementations derive them from
+voltage IDs. Readings of zero and the driver's unavailable sentinel are
+omitted. [Linux ABI](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/include/kgd_pp_interface.h), [Example v1.3 driver](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/pm/swsmu/smu11/sienna_cichlid_ppt.c#L3698-L3706).
+
+### Strix Halo firmware voltages
+
+The optional [Strix Halo hwmon provider](drivers/strix-halo) exposes **GFX
+voltage (SMU)** at `0x54c` and **SoC voltage (SMU)** at `0x338` in SMU table
+revision `0x64020c`. Both mappings were checked on a GMKtec EVO-X2. Build the
+provider with the headers for your running kernel.
+
+```sh
+make -C "/lib/modules/$(uname -r)/build" M="$PWD/drivers/strix-halo" modules
+sudo insmod drivers/strix-halo/mainsense_strix_halo.ko
+./mainsense --once
+```
+
+These are firmware-reported voltages. The relationship between the graphics
+field and a physical regulator output remains unverified. The provider
+refreshes at most every 250 ms across all readers. MainSense runs as a regular
+user.
+
+Use the provider on its own for RSMU access. Other direct SMU tools can share the
+same firmware mailbox. The module stays active until unload or reboot. To
+unload it, run `sudo rmmod mainsense_strix_halo`. Load it again after reboot.
+[Firmware measurements and verification](docs/sensor-resource-review.md#strix-halo-voltage-follow-up)
 
 ## Verified on this machine
 
@@ -158,13 +199,12 @@ machine. Both returned placeholder zeros during GPU activity. The k10temp,
 ACPI and NVMe hwmon devices exposed no voltage channels. The supported
 `gpu_metrics` v3.0 layout has no voltage fields. [SMU driver](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/pm/swsmu/smu14/smu_v14_0_0_ppt.c#L325-L330), [GPU metrics ABI](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/include/kgd_pp_interface.h#L1096-L1175).
 
-A temporary Linux probe captured three live voltage fields from this machine's
-separate SMU firmware table. The physical rail identities still need validation
-before MainSense can label those readings. [Capture and findings](docs/sensor-resource-review.md#strix-halo-voltage-follow-up).
+The optional provider exposes the firmware's graphics and SoC values
+alongside the stock driver. [Capture and findings](docs/sensor-resource-review.md#strix-halo-voltage-follow-up).
 
-The binary GPU metrics decoder currently accepts only the verified v3.0 layout;
-other versions keep their sysfs/hwmon readings. Zero-filled core/skin fields on
-this machine are not presented as functioning temperature sensors.
+The binary decoder uses the exact v3.0 layout for SoC temperature and average
+UCLK. Other revisions use hwmon for those readings. Zero-filled core and skin
+fields on this machine are omitted.
 
 Process visibility follows the current PID namespace and access permissions;
 inside a container the list can be smaller than the host's. The process table

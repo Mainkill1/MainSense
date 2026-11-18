@@ -93,10 +93,57 @@ all succeeded. AMDGPU stayed bound and reported 93% GPU utilization throughout
 the final capture and after the probe unloaded. The out-of-tree and unsigned
 module taint flags persist until reboot.
 
-For MainSense, a permanent provider should expose verified rail identities through
-hwmon, check the table revision and length, and report a rejected refresh as
-unavailable. The temporary module was unloaded and the capture is saved here.
-[Live capture](measurements/strix-halo-voltage.json).
+The [original live capture](measurements/strix-halo-voltage.json) came from
+the temporary probe. A later experimental hwmon provider also returned
+complete data from all three records in 120 samples at 0.2-second intervals.
+Later research identified the SoC record. The other two records are omitted
+from MainSense while their rail identities remain unknown.
+
+### Open-source voltage sources
+
+| Source | Strix Halo result |
+| --- | --- |
+| AMDGPU and k10temp | AMDGPU's SMU 14.0.0 graphics and SoC voltage getters return zero. k10temp exposes temperatures. [AMDGPU source](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/amd/pm/swsmu/smu14/smu_v14_0_0_ppt.c#L377-L382), [k10temp source](https://github.com/torvalds/linux/blob/master/drivers/hwmon/k10temp.c). |
+| RyzenAdj | Maps graphics-domain voltage to `0x54c` for revision `0x64020c`. Its SoC voltage getter lacks a Strix Halo mapping. [Graphics getter](https://github.com/FlyGoat/RyzenAdj/blob/master/lib/api.c#L2529-L2560), [SoC getter](https://github.com/FlyGoat/RyzenAdj/blob/master/lib/api.c#L2674-L2695). |
+| Saku Overclock | Maps SoC voltage, current, and power to float indices 206, 207, and 208 for the exact Strix Halo revision. [Voltage and power](https://github.com/Erruar/Saku-Overclock.Core/blob/3a4c1f6543a652e5446ece961832afc522adfa07/Saku%20Overclock.Core/Services/SensorIndexResolver.cs#L1539-L1663), [current](https://github.com/Erruar/Saku-Overclock.Core/blob/3a4c1f6543a652e5446ece961832afc522adfa07/Saku%20Overclock.Core/Services/SensorIndexResolver.cs#L788-L842). |
+| ZenStates-Core v1.91 | Recognizes the exact Strix Halo table and size. The SVI3 rail maps cover other families. [Table definitions](https://github.com/irusanov/ZenStates-Core/blob/v1.91/Hardware/PowerTable.cs#L237-L249). |
+| LibreHardwareMonitor and Zenpower5 | LibreHardwareMonitor's per-core Vcore is decoded from a CPU VID. Zenpower5 uses RAPL for Zen 5 power and lacks SVI3 voltage support. [LibreHardwareMonitor source](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/LibreHardwareMonitorLib/Hardware/Cpu/Amd17Cpu.cs#L692-L700), [Zenpower5 notes](https://github.com/mattkeenan/zenpower5#notes). |
+| Board interfaces | The EVO-X2 Linux EC project maps fans and power modes. This host has an SPD hub on I²C and lacks a bound PMBus voltage sensor. [EVO-X2 EC project](https://github.com/KyaniteLabs/evo-x2-ec), [Linux PMBus documentation](https://docs.kernel.org/hwmon/pmbus.html). |
+
+In 30 live samples on the EVO-X2 at 93% GPU utilization, `0x54c` ranged from
+0.929 to 0.948 V. The adjacent graphics temperature at `0x550` was within
+1.9 °C of AMDGPU v3.0 and the graphics clock at `0x558` was within 30 MHz.
+The graphics-domain value differed from all three unidentified regulator
+records. This corroborates the graphics block assignment. The source of the
+firmware voltage within that domain and its absolute calibration remain
+unverified. In the same capture, SoC voltage at `0x338` times current at
+`0x33c` matched power at `0x340` within 0.009 W, and voltage differed from
+the preceding request field. These observations support reading the mapped
+SoC telemetry.
+
+The optional [hwmon provider](../drivers/strix-halo) reads the mapped graphics
+and SoC fields on matching machines. It checks CPU and PCI IDs, table revision,
+and reported size, then publishes named hwmon voltages in millivolts.
+It uses the kernel's AMD SMN accessors and the same firmware protocol as the
+temporary probe. On the EVO-X2, a 60-sample JSONL run at 0.2-second intervals
+recorded valid GFX and SoC values throughout, with GPU utilization at 93–94%.
+The collector ignores legacy anonymous probe labels and number-only hwmon
+labels. It retains named channels with read-status diagnostics.
+
+The EVO-X2 board teardown identifies Vcore, SoC, and MISC regulator groups
+and MPS MP2825 controllers. Neither the teardown nor AMD's public model 70h
+reference maps the remaining table fields `0x324` and `0x34c` to physical rails.
+RyzenAdj maps per-core values starting at `0xbd0` and their measurement basis
+remains unverified. MainSense omits these fields from the voltage list.
+[EVO-X2 teardown](https://chimolog.co/gmktec-evo-x2/),
+[AMD processor reference](https://docs.amd.com/v/u/en-US/57930-A0-PUB_3.00),
+[RyzenAdj per-core mapping](https://github.com/FlyGoat/RyzenAdj/blob/44438e1ba2bd5882b7ce68b6d2cfae9599fcf2b8/lib/api.c#L2367-L2408).
+
+For other AMD GPUs and APUs, the kernel's public `gpu_metrics` ABI defines
+voltage fields in v1.3 and v2.4. A C `sizeof` and `offsetof` check against the
+Linux v6.12 declarations verified the 120- and 168-byte layouts and their
+voltage offsets. The local Strix Halo exposes v3.0, so the additional layouts
+are exercised with byte fixtures. [Linux ABI](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/include/kgd_pp_interface.h), [Offsets and usage](../README.md#amdgpu-metrics-voltages).
 
 ## Resource measurements
 
