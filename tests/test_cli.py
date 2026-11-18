@@ -6,19 +6,28 @@ import resource
 import select
 import signal
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+EXECUTABLE = Path(os.environ.get("MAINSENSE_BIN", ROOT / "mainsense")).resolve()
 
 
 class CLITests(unittest.TestCase):
     def call(self, *args):
-        return subprocess.run([sys.executable, "-m", "mainsense", *args], cwd=ROOT,
+        return subprocess.run([EXECUTABLE, *args], cwd=ROOT,
                               text=True, capture_output=True, timeout=10)
+
+    def test_release_executable_and_help_are_available(self):
+        version = self.call("--version")
+        self.assertEqual(version.returncode, 0, version.stderr)
+        self.assertRegex(version.stdout, r"^mainsense \d+\.\d+\.\d+\n$")
+        help_text = self.call("--help")
+        self.assertEqual(help_text.returncode, 0, help_text.stderr)
+        self.assertIn("Usage: mainsense", help_text.stdout)
+        self.assertIn("--log-file", help_text.stdout)
 
     def test_json_snapshot_has_real_numbers_and_explicit_units(self):
         result = self.call("--json", "--once", "-i", "0.2")
@@ -65,7 +74,7 @@ class CLITests(unittest.TestCase):
             path.write_bytes(previous)
             limit = len(previous) + 300
             result = subprocess.run(
-                [sys.executable, "-m", "mainsense", "--log-file", path, "--json", "--once", "-i", "0.2"],
+                [EXECUTABLE, "--log-file", path, "--json", "--once", "-i", "0.2"],
                 cwd=ROOT, capture_output=True, timeout=10,
                 preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit)),
             )
@@ -84,7 +93,7 @@ class CLITests(unittest.TestCase):
             alias.hardlink_to(path)
             with alias.open("r+b") as stdout:
                 result = subprocess.run(
-                    [sys.executable, "-m", "mainsense", "--log-file", path, "--once", "-i", "0.2"],
+                    [EXECUTABLE, "--log-file", path, "--once", "-i", "0.2"],
                     cwd=ROOT, stdout=stdout, stderr=subprocess.PIPE, timeout=10,
                 )
             self.assertNotEqual(result.returncode, 0)
@@ -96,7 +105,7 @@ class CLITests(unittest.TestCase):
             path = Path(folder) / "rig.jsonl"
             rotated = path.with_suffix(".old")
             with subprocess.Popen(
-                [sys.executable, "-m", "mainsense", "--log-file", path, "--json", "--count", "6", "-i", "0.2"],
+                [EXECUTABLE, "--log-file", path, "--json", "--count", "6", "-i", "0.2"],
                 cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             ) as process:
                 try:
@@ -124,7 +133,7 @@ class CLITests(unittest.TestCase):
             with path.open("wb") as holder:
                 fcntl.flock(holder, fcntl.LOCK_EX)
                 with subprocess.Popen(
-                    [sys.executable, "-m", "mainsense", "--log-file", path, "--json", "--count", "3", "-i", "0.2"],
+                    [EXECUTABLE, "--log-file", path, "--json", "--count", "3", "-i", "0.2"],
                     cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
                 ) as process:
                     try:
@@ -147,7 +156,7 @@ class CLITests(unittest.TestCase):
             with path.open("wb") as holder:
                 fcntl.flock(holder, fcntl.LOCK_EX)
                 with subprocess.Popen(
-                    [sys.executable, "-m", "mainsense", "--log-file", path, "--json", "-i", "0.2"],
+                    [EXECUTABLE, "--log-file", path, "--json", "-i", "0.2"],
                     cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 ) as process:
                     try:
@@ -161,6 +170,35 @@ class CLITests(unittest.TestCase):
                     self.assertEqual(process.returncode, 0, stderr)
             self.assertTrue(stdout)
             self.assertEqual(path.read_bytes(), stdout)
+
+    def test_sigterm_exits_when_stdout_pipe_is_full(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rig.jsonl"
+            reader, writer = os.pipe()
+            try:
+                capacity = fcntl.fcntl(writer, fcntl.F_GETPIPE_SZ)
+                self.assertEqual(os.write(writer, b"x" * capacity), capacity)
+                with subprocess.Popen(
+                    [EXECUTABLE, "--log-file", path, "--json", "-i", "0.2"],
+                    cwd=ROOT, stdout=writer, stderr=subprocess.PIPE,
+                ) as process:
+                    try:
+                        deadline = time.monotonic() + 3
+                        while time.monotonic() < deadline:
+                            if path.exists() and path.stat().st_size:
+                                break
+                            time.sleep(0.01)
+                        self.assertTrue(path.exists() and path.stat().st_size)
+                        self.assertIsNone(process.poll())
+                        process.send_signal(signal.SIGTERM)
+                        self.assertEqual(process.wait(timeout=1.5), 0)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                self.assertEqual(json.loads(path.read_text())["schema_version"], 1)
+            finally:
+                os.close(reader)
+                os.close(writer)
 
     def test_invalid_intervals_fail_before_sampling(self):
         for interval in ("nan", "inf", "-1", "0", "100", "bad"):

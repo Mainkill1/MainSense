@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the real curses process in a PTY; discard output instead of retaining it.
+"""Measure the native terminal app in a PTY; discard output instead of retaining it.
 
 CPU percentages use one logical CPU = 100%. This does not stress the machine.
 """
@@ -12,7 +12,6 @@ from pathlib import Path
 import select
 import struct
 import subprocess
-import sys
 import termios
 import time
 
@@ -47,7 +46,7 @@ def benchmark(project, interval, seconds, keys=b""):
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
         env = dict(os.environ, TERM="xterm-256color")
         env.pop("NO_COLOR", None)
-        process = subprocess.Popen([sys.executable, "-m", "mainsense", "-i", str(interval)],
+        process = subprocess.Popen([project.resolve() / "mainsense", "-i", str(interval)],
                                    cwd=project, env=env, stdin=slave, stdout=slave, stderr=slave,
                                    start_new_session=True)
         os.close(slave)

@@ -1,25 +1,32 @@
 # MainSense
 
 A readable terminal monitor for Linux CPU, AMD GPU, RAM, VRAM, temperatures and voltages.
-Runs directly with Python 3.10+ and its standard library, including `curses`.
-No daemon, browser, root access, ROCm installation or Python packages required.
+MainSense is a native Rust executable. It uses Linux's read-only monitoring
+interfaces and runs as a regular user.
 
 ## Install and run
 
-Install the wheel from the [GitHub release](https://github.com/Mainkill1/MainSense/releases/tag/v0.1.0) with pipx.
+Download the Linux archive for your architecture, extract it, and run the
+executable. [GitHub releases](https://github.com/Mainkill1/MainSense/releases)
 
 ```sh
-pipx install 'https://github.com/Mainkill1/MainSense/releases/download/v0.1.0/mainsense-0.1.0-py3-none-any.whl'
-mainsense
+./mainsense --help
+./mainsense
 ```
 
-To run directly from a checkout, use `python3 -m mainsense` in place of `mainsense`.
+To build from a checkout, use Rust 1.85 or newer, Cargo, and Make.
 
 ```sh
 git clone https://github.com/Mainkill1/MainSense.git
 cd MainSense
-python3 -m mainsense
+make
+./mainsense
 ```
+
+The examples below use `mainsense` from your PATH. Use `./mainsense` to
+run it from the current directory.
+If you are upgrading a v0.1.0 checkout and an old `mainsense/` cache directory
+is still present, move it aside before building.
 
 The overview keeps CPU and GPU activity and temperatures above RAM and VRAM.
 Wide terminals use two columns; narrow terminals stack the panels. The header
@@ -169,14 +176,16 @@ monitoring continues with an explanatory message.
 ## Development
 
 ```sh
+cargo test --locked
+make
 python3 -m unittest discover -s tests -v
 python3 scripts/benchmark_monitor.py --seconds 30 --soak-seconds 180 --output /tmp/mainsense-benchmark.json
 ```
 
-Tests cover CPU and RAM accounting, device discovery, sensor units, unavailable
-readings, CPU hotplug, process exit/PID reuse, layouts, CLI output and a real
-pseudo-terminal resize/input/cleanup session. Fixture tests do not need AMD
-hardware; CLI/PTY integration tests require Linux with readable `/proc`.
+Rust tests cover CPU and RAM accounting, process stat parsing, device discovery,
+sensor units, unavailable readings, layouts and JSONL logging. The Python
+development checks run the compiled binary in a real pseudo-terminal and
+exercise CLI output, fast sampling, log rotation and shutdown.
 
 The benchmark measures the actual terminal app, including rendering, in four
 refresh/process/pause configurations. CPU percentages use one logical CPU as
@@ -184,9 +193,8 @@ refresh/process/pause configurations. CPU percentages use one logical CPU as
 [sensor and resource review](docs/sensor-resource-review.md) for findings,
 measurements and remaining limitations.
 
-The collector, presentation and CLI are separate in `mainsense/metrics.py`,
-`mainsense/tui.py` and `mainsense/__main__.py`. `pyproject.toml` also provides a
-`mainsense` entry point for packaging; running the checkout needs no installation.
+Linux collection lives in `src/metrics.rs` and `src/sensors.rs`. The terminal UI
+lives in `src/tui.rs`, and the CLI in `src/main.rs`.
 
 Design informed by amdgpu_top, btop, nvtop and amdtop, with independently written
 code. See [the design comparison](docs/design.md) for sources and decisions.

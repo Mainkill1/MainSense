@@ -1,4 +1,4 @@
-"""Exercise curses, actual terminal input and resize signals in a real PTY."""
+"""Exercise the native dashboard, actual input and resizing in a real PTY."""
 
 import fcntl
 import json
@@ -8,11 +8,12 @@ import select
 import signal
 import struct
 import subprocess
-import sys
 import tempfile
 import termios
 import time
 import unittest
+
+from test_cli import EXECUTABLE, ROOT
 
 
 class TerminalTests(unittest.TestCase):
@@ -46,15 +47,15 @@ class TerminalTests(unittest.TestCase):
             resize(80, 24)
             env = dict(os.environ, TERM="xterm-256color")
             env.pop("NO_COLOR", None)
-            process = subprocess.Popen([sys.executable, "-m", "mainsense", "-i", "0.2", "--log-file", log_path],
-                                       cwd=Path(__file__).resolve().parents[1], env=env,
+            process = subprocess.Popen([EXECUTABLE, "-i", "0.2", "--log-file", log_path],
+                                       cwd=ROOT, env=env,
                                        stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
             os.close(slave)
             slave = None
             captured = receive(0.5)
             self.assertIn(b"VRAM", captured)
             self.assertIn(b"q quit", captured)
-            self.assertIn(b"\x1b[36m", captured)  # Color-capable path actually used.
+            self.assertRegex(captured, rb"\x1b\[38;5;(6|14)m")  # Cyan foreground.
             with log_path.open("rb") as held_log:
                 fcntl.flock(held_log, fcntl.LOCK_EX)
                 receive(0.3)

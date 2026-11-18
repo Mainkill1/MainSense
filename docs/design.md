@@ -62,7 +62,7 @@ The initial acceptance results below are supplemented by the later
 additional temperature/clock coverage and measurements of the complete TUI.
 
 - 27 tests pass, including accounting fixtures, device disappearance, missing
-  readings, process PID reuse, live CLI output and real curses input/resize.
+  readings, process identity, live CLI output and real terminal input/resize.
 - Geometry tests cover 1x1, 20x5, 42x18, 80x24, 120x40 and 240x60. PTY checks
   exercise 80x24, 120x40, 42x18 and 1x1, then restore the normal window.
 - Live VRAM total/used byte values matched direct sysfs reads. Linux RAM, CPU
@@ -75,4 +75,4 @@ additional temperature/clock coverage and measurements of the complete TUI.
 - Optional wheel construction was attempted without network access and could
   not run because this environment lacks `setuptools.build_meta`. Direct
   checkout execution and the CLI entry point are verified; wheel installation
-  is not. No additional dependency is needed to run `python3 -m mainsense` from a checkout.
+  is not. Build the executable from a checkout with `make` and run `./mainsense`.

@@ -100,7 +100,8 @@ unavailable. The temporary module was unloaded and the capture is saved here.
 
 ## Resource measurements
 
-`scripts/benchmark_monitor.py` runs the real color curses app in a 120×40 PTY,
+The measurements below used the original Python terminal app.
+The current `scripts/benchmark_monitor.py` runs the native app in a 120×40 PTY,
 drains output without retaining it, and measures process CPU ticks and RSS
 from `/proc`. Each case warms up for three seconds. The baseline was measured
 for 20 seconds per case, the revised app for 30 seconds. **100% CPU means one
@@ -136,9 +137,11 @@ generate a heavy CPU/GPU workload or exercise other hardware/driver versions.
 ## Reproduce
 
 ```sh
+cargo test --locked
+make
 python3 -m unittest discover -s tests -v
 python3 scripts/benchmark_monitor.py --seconds 30 --soak-seconds 180 --output /tmp/mainsense-benchmark.json
-python3 -m mainsense --json --once
+./mainsense --json --once
 ```
 
 All **40 tests** passed, including counter accounting, sensor units, invalid and
