@@ -1,0 +1,97 @@
+{
+  "temperature_input_count": 5,
+  "missing_inputs": [],
+  "sensors": [
+    {
+      "id": "/sys/devices/virtual/thermal/thermal_zone0/hwmon0/temp1_input",
+      "chip": "acpitz",
+      "device": "hwmon0",
+      "kind": "other",
+      "label": "temp1",
+      "temperature_c": 85.0,
+      "critical_c": 110.0,
+      "alarm": false,
+      "source": "/sys/class/hwmon/hwmon0/temp1_input",
+      "sample_age_seconds": 0.0
+    },
+    {
+      "id": "/sys/devices/pci0000:00/0000:00:02.5/0000:c3:00.0/nvme/nvme0/hwmon1/temp1_input",
+      "chip": "nvme",
+      "device": "hwmon1",
+      "kind": "other",
+      "label": "Composite",
+      "temperature_c": 37.85,
+      "critical_c": 79.85,
+      "alarm": false,
+      "source": "/sys/class/hwmon/hwmon1/temp1_input",
+      "sample_age_seconds": 0.0
+    },
+    {
+      "id": "/sys/devices/pci0000:00/0000:00:02.5/0000:c3:00.0/nvme/nvme0/hwmon1/temp3_input",
+      "chip": "nvme",
+      "device": "hwmon1",
+      "kind": "other",
+      "label": "Sensor 2",
+      "temperature_c": 77.85,
+      "critical_c": null,
+      "alarm": false,
+      "source": "/sys/class/hwmon/hwmon1/temp3_input",
+      "sample_age_seconds": 0.0
+    },
+    {
+      "id": "/sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon2/temp1_input",
+      "chip": "k10temp",
+      "device": "hwmon2",
+      "kind": "cpu",
+      "label": "Tctl",
+      "temperature_c": 87.5,
+      "critical_c": null,
+      "alarm": false,
+      "source": "/sys/class/hwmon/hwmon2/temp1_input",
+      "sample_age_seconds": 0.0
+    },
+    {
+      "id": "/sys/devices/pci0000:00/0000:00:08.1/0000:c4:00.0/hwmon/hwmon3/temp1_input",
+      "chip": "amdgpu",
+      "device": "hwmon3",
+      "kind": "gpu",
+      "label": "edge",
+      "temperature_c": 32.0,
+      "critical_c": null,
+      "alarm": false,
+      "source": "/sys/class/hwmon/hwmon3/temp1_input",
+      "sample_age_seconds": 0.0
+    },
+    {
+      "id": "/sys/devices/pci0000:00/0000:00:08.1/0000:c4:00.0/gpu_metrics#soc",
+      "chip": "amdgpu_metrics",
+      "device": "card0",
+      "kind": "gpu",
+      "label": "SoC",
+      "temperature_c": 33.25,
+      "critical_c": null,
+      "alarm": false,
+      "source": "/sys/class/drm/card0/device/gpu_metrics",
+      "sample_age_seconds": 0
+    }
+  ],
+  "gpu_metrics_reference": "amdgpu_top 0.11.5 on same captured bytes",
+  "comparisons": {
+    "gfx_temperature_c": [
+      33.25,
+      33.25
+    ],
+    "soc_temperature_c": [
+      33.25,
+      33.25
+    ],
+    "memory_clock_mhz": [
+      999.0,
+      999
+    ],
+    "clock_mhz": [
+      600.0,
+      600
+    ]
+  }
+}

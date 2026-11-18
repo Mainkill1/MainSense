@@ -1,0 +1,351 @@
+{
+  "host_model": "GMKtec EVO-X2",
+  "cpu": "AMD Ryzen AI MAX+ 395",
+  "bios": "EVO-X2 1.12",
+  "kernel_release": "6.12.115+deb13.1-amd64",
+  "gpu_smc_version": "0x0a640600",
+  "probe_source_commit": "d2a4c942398d46ce5f6b97314cf236409d92bb18",
+  "method": "Each sample is one positional read of 60 bytes at offset 0x320 in a 4136-byte SMU firmware power table. Rails are in table order. The field interpretations are inferred and the rails have not been identified or independently calibrated.",
+  "samples": [
+    {
+      "timestamp": 1794995847.367,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 0,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1274,
+          "voltage_v": 1.0784,
+          "current_a": 55.1827,
+          "power_w": 59.5329,
+          "vrm_temperature_c": 64.36,
+          "power_residual_w": 0.02507
+        },
+        {
+          "request_v": 0.6589,
+          "voltage_v": 0.6586,
+          "current_a": 1.5996,
+          "power_w": 1.0534,
+          "vrm_temperature_c": 51.97,
+          "power_residual_w": -0.00002
+        },
+        {
+          "request_v": 0.8075,
+          "voltage_v": 0.7879,
+          "current_a": 9.6758,
+          "power_w": 7.637,
+          "vrm_temperature_c": 55,
+          "power_residual_w": 0.01317
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995847.619,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 1,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1262,
+          "voltage_v": 1.0744,
+          "current_a": 58.44,
+          "power_w": 62.955,
+          "vrm_temperature_c": 64.3,
+          "power_residual_w": 0.16651
+        },
+        {
+          "request_v": 0.4608,
+          "voltage_v": 0.6363,
+          "current_a": 1.1061,
+          "power_w": 0.7042,
+          "vrm_temperature_c": 51.97,
+          "power_residual_w": 0.0004
+        },
+        {
+          "request_v": 0.8171,
+          "voltage_v": 0.7968,
+          "current_a": 10.0251,
+          "power_w": 8.014,
+          "vrm_temperature_c": 55.08,
+          "power_residual_w": 0.0263
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995847.866,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 2,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1283,
+          "voltage_v": 1.0742,
+          "current_a": 58.9188,
+          "power_w": 63.4165,
+          "vrm_temperature_c": 64.34,
+          "power_residual_w": 0.12586
+        },
+        {
+          "request_v": 0.4349,
+          "voltage_v": 0.6243,
+          "current_a": 1.06,
+          "power_w": 0.6623,
+          "vrm_temperature_c": 51.98,
+          "power_residual_w": 0.0005
+        },
+        {
+          "request_v": 0.8176,
+          "voltage_v": 0.7974,
+          "current_a": 10.0511,
+          "power_w": 8.038,
+          "vrm_temperature_c": 55.03,
+          "power_residual_w": 0.02381
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995848.117,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 3,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1279,
+          "voltage_v": 1.0768,
+          "current_a": 57.6938,
+          "power_w": 62.2201,
+          "vrm_temperature_c": 64.28,
+          "power_residual_w": 0.09815
+        },
+        {
+          "request_v": 0.3598,
+          "voltage_v": 0.5977,
+          "current_a": 1.0838,
+          "power_w": 0.6543,
+          "vrm_temperature_c": 51.98,
+          "power_residual_w": 0.00655
+        },
+        {
+          "request_v": 0.8171,
+          "voltage_v": 0.7985,
+          "current_a": 9.8652,
+          "power_w": 7.9058,
+          "vrm_temperature_c": 55.03,
+          "power_residual_w": 0.02822
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995848.367,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 4,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1367,
+          "voltage_v": 1.0838,
+          "current_a": 58.7584,
+          "power_w": 63.8072,
+          "vrm_temperature_c": 64.23,
+          "power_residual_w": 0.12234
+        },
+        {
+          "request_v": 0.4283,
+          "voltage_v": 0.6192,
+          "current_a": 1.0686,
+          "power_w": 0.6622,
+          "vrm_temperature_c": 51.98,
+          "power_residual_w": 0.00049
+        },
+        {
+          "request_v": 0.8131,
+          "voltage_v": 0.7929,
+          "current_a": 9.9416,
+          "power_w": 7.8972,
+          "vrm_temperature_c": 55.03,
+          "power_residual_w": 0.01478
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995848.622,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 5,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1247,
+          "voltage_v": 1.072,
+          "current_a": 58.8089,
+          "power_w": 63.2003,
+          "vrm_temperature_c": 64.33,
+          "power_residual_w": 0.15908
+        },
+        {
+          "request_v": 0.4332,
+          "voltage_v": 0.6115,
+          "current_a": 1.1275,
+          "power_w": 0.6926,
+          "vrm_temperature_c": 51.97,
+          "power_residual_w": 0.0031
+        },
+        {
+          "request_v": 0.814,
+          "voltage_v": 0.7933,
+          "current_a": 10.0621,
+          "power_w": 7.9968,
+          "vrm_temperature_c": 55.02,
+          "power_residual_w": 0.01472
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995848.866,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 6,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1196,
+          "voltage_v": 1.0671,
+          "current_a": 59.1971,
+          "power_w": 63.2628,
+          "vrm_temperature_c": 64.34,
+          "power_residual_w": 0.09155
+        },
+        {
+          "request_v": 0.3914,
+          "voltage_v": 0.6061,
+          "current_a": 1.0685,
+          "power_w": 0.648,
+          "vrm_temperature_c": 51.98,
+          "power_residual_w": 0.00037
+        },
+        {
+          "request_v": 0.8132,
+          "voltage_v": 0.7928,
+          "current_a": 9.8873,
+          "power_w": 7.848,
+          "vrm_temperature_c": 55.06,
+          "power_residual_w": 0.00901
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995849.116,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 7,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1243,
+          "voltage_v": 1.074,
+          "current_a": 58.1361,
+          "power_w": 62.5453,
+          "vrm_temperature_c": 64.29,
+          "power_residual_w": 0.10593
+        },
+        {
+          "request_v": 0.4404,
+          "voltage_v": 0.6201,
+          "current_a": 1.129,
+          "power_w": 0.7,
+          "vrm_temperature_c": 51.99,
+          "power_residual_w": -0.00007
+        },
+        {
+          "request_v": 0.8181,
+          "voltage_v": 0.7981,
+          "current_a": 10.009,
+          "power_w": 8.0067,
+          "vrm_temperature_c": 55.06,
+          "power_residual_w": 0.01814
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995849.368,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 8,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1297,
+          "voltage_v": 1.0764,
+          "current_a": 58.0319,
+          "power_w": 62.6405,
+          "vrm_temperature_c": 64.19,
+          "power_residual_w": 0.17204
+        },
+        {
+          "request_v": 0.4597,
+          "voltage_v": 0.6227,
+          "current_a": 1.0846,
+          "power_w": 0.6739,
+          "vrm_temperature_c": 51.98,
+          "power_residual_w": -0.00148
+        },
+        {
+          "request_v": 0.8187,
+          "voltage_v": 0.7992,
+          "current_a": 9.9745,
+          "power_w": 8.0008,
+          "vrm_temperature_c": 55.08,
+          "power_residual_w": 0.02936
+        }
+      ]
+    },
+    {
+      "timestamp": 1794995849.617,
+      "revision": "0x64020c",
+      "table_bytes": 4136,
+      "index": 9,
+      "capture_bytes": 60,
+      "gpu_busy_percent": 93,
+      "candidate_rails": [
+        {
+          "request_v": 1.1309,
+          "voltage_v": 1.0789,
+          "current_a": 58.5078,
+          "power_w": 63.26,
+          "vrm_temperature_c": 64.18,
+          "power_residual_w": 0.13384
+        },
+        {
+          "request_v": 0.4247,
+          "voltage_v": 0.6169,
+          "current_a": 1.1122,
+          "power_w": 0.6863,
+          "vrm_temperature_c": 51.99,
+          "power_residual_w": 0.0002
+        },
+        {
+          "request_v": 0.8263,
+          "voltage_v": 0.8054,
+          "current_a": 10.1412,
+          "power_w": 8.1985,
+          "vrm_temperature_c": 55.05,
+          "power_residual_w": 0.03112
+        }
+      ]
+    }
+  ]
+}
